@@ -3,6 +3,7 @@ package mustgather
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -521,8 +522,11 @@ func TestReconcile(t *testing.T) {
 				if out.Status.Status != "Failed" {
 					t.Fatalf("expected Status=Failed, got %q", out.Status.Status)
 				}
-				if out.Status.Reason == "" {
-					t.Fatalf("expected non-empty Reason when secret is not found")
+				if !out.Status.Completed {
+					t.Fatalf("expected Completed=true when secret is not found")
+				}
+				if !strings.Contains(out.Status.Reason, "sec") {
+					t.Fatalf("expected Reason to contain secret name %q, got %q", "sec", out.Status.Reason)
 				}
 			},
 		},
