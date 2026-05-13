@@ -510,10 +510,21 @@ func TestReconcile(t *testing.T) {
 				}
 				return []client.Object{mg, cv}
 			},
-			interceptors:   func() interceptClient { return interceptClient{} },
-			expectError:    false,
-			expectResult:   reconcile.Result{},
-			postTestChecks: func(t *testing.T, cl client.Client) {},
+			interceptors: func() interceptClient { return interceptClient{} },
+			expectError:  false,
+			expectResult: reconcile.Result{},
+			postTestChecks: func(t *testing.T, cl client.Client) {
+				out := &mustgatherv1alpha1.MustGather{}
+				if err := cl.Get(context.TODO(), types.NamespacedName{Name: "example-mustgather", Namespace: "ns"}, out); err != nil {
+					t.Fatalf("failed to get mustgather: %v", err)
+				}
+				if out.Status.Status != "Failed" {
+					t.Fatalf("expected Status=Failed, got %q", out.Status.Status)
+				}
+				if out.Status.Reason == "" {
+					t.Fatalf("expected non-empty Reason when secret is not found")
+				}
+			},
 		},
 		{
 			name: "reconcile_job_active_updates_status_running",
