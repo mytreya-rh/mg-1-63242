@@ -484,7 +484,7 @@ func TestReconcile(t *testing.T) {
 			},
 		},
 		{
-			name: "reconcile_job_not_found_user_secret_missing_no_requeue",
+			name: "reconcile_job_not_found_user_secret_missing_sets_failed_status",
 			setupEnv: func(t *testing.T) {
 				t.Setenv("OPERATOR_IMAGE", "img")
 			},
@@ -510,8 +510,56 @@ func TestReconcile(t *testing.T) {
 				}
 				return []client.Object{mg, cv}
 			},
-			interceptors:   func() interceptClient { return interceptClient{} },
-			expectError:    false,
+			interceptors: func() interceptClient { return interceptClient{} },
+			expectError:  false,
+			expectResult: reconcile.Result{},
+			postTestChecks: func(t *testing.T, cl client.Client) {
+				out := &mustgatherv1alpha1.MustGather{}
+				if err := cl.Get(context.TODO(), types.NamespacedName{Name: "example-mustgather", Namespace: "ns"}, out); err != nil {
+					t.Fatalf("failed to get mustgather: %v", err)
+				}
+				if out.Status.Status != "Failed" {
+					t.Errorf("expected Status.Status = 'Failed', got %q", out.Status.Status)
+				}
+				if !out.Status.Completed {
+					t.Errorf("expected Status.Completed = true, got false")
+				}
+				if out.Status.Reason == "" {
+					t.Errorf("expected Status.Reason to be set, got empty string")
+				}
+			},
+		},
+		{
+			name: "reconcile_job_not_found_user_secret_missing_status_update_fails",
+			setupEnv: func(t *testing.T) {
+				t.Setenv("OPERATOR_IMAGE", "img")
+			},
+			setupObjects: func() []client.Object {
+				mg := &mustgatherv1alpha1.MustGather{
+					ObjectMeta: metav1.ObjectMeta{Name: "example-mustgather", Namespace: "ns", Finalizers: []string{mustGatherFinalizer}},
+					Spec: mustgatherv1alpha1.MustGatherSpec{
+						ServiceAccountRef: corev1.LocalObjectReference{Name: "default"},
+						UploadTarget: &mustgatherv1alpha1.UploadTargetSpec{
+							Type: mustgatherv1alpha1.UploadTypeSFTP,
+							SFTP: &mustgatherv1alpha1.SFTPSpec{
+								CaseID:                         "12345678",
+								CaseManagementAccountSecretRef: corev1.LocalObjectReference{Name: "sec"},
+							},
+						},
+					},
+				}
+				cv := &configv1.ClusterVersion{
+					ObjectMeta: metav1.ObjectMeta{Name: "version"},
+					Status: configv1.ClusterVersionStatus{
+						History: []configv1.UpdateHistory{{State: "Completed", Version: "1.2.3"}},
+					},
+				}
+				return []client.Object{mg, cv}
+			},
+			interceptors: func() interceptClient {
+				return interceptClient{status: &failingStatusWriter{}}
+			},
+			expectError:    true,
 			expectResult:   reconcile.Result{},
 			postTestChecks: func(t *testing.T, cl client.Client) {},
 		},
